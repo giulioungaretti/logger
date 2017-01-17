@@ -2,6 +2,7 @@
 Simple client that prints to console
 """
 import asyncio
+import json
 import logging
 import sys
 
@@ -32,10 +33,10 @@ p_log.addHandler(a)
 
 
 async def producer(sock):
-    msg = await sock.recv_multipart()
-    p_log.debug(msg[1])
+    msg = await sock.recv_json()
+    p_log.debug(msg)
     # just get the message
-    return msg[1]
+    return msg
 
 c_log = logging.getLogger("consumer")
 c_log.setLevel(logging.DEBUG)
@@ -68,7 +69,7 @@ async def handler(websocket, path):
 
         if producer_task in done:
             message = producer_task.result()
-            await websocket.send(message)
+            await websocket.send(json.dumps(message))
         else:
             producer_task.cancel()
 
