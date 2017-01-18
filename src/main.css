@@ -53,3 +53,12 @@ li span{
 }
 
 .btn:focus {outline:0;}
+
+
+.WARNING{
+    background-color: yellow;
+}
+
+.ERROR{
+    background-color: red;
+}
