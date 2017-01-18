@@ -1,31 +1,52 @@
 module App exposing (..)
 
-import Html exposing (Html, text, div, img, span, li, ul, input, button)
+import Html exposing (Html, text, div, img, span, li, ul, input, button, label)
 import Html.Attributes exposing (..)
 import Html.Events exposing (onInput, onClick)
 import WebSocket exposing (..)
+import Json.Decode exposing (Decoder, string, int, maybe)
+import Json.Decode.Pipeline as JP exposing (decode, required)
+import Debug exposing (..)
 
 
 type alias Model =
-    { messages : List Message
-    , hilight : Maybe String
+    { messages : Maybe (List Message)
+    , filters : Maybe Filters
+    }
+
+
+type alias Filters =
+    { filter : Maybe String
+    , levels : Maybe (List String)
     }
 
 
 type alias Message =
-    { level : String
+    { levelname : String
+    , name : String
     , message : String
-    , hilight : Bool
-    , show : Bool
+    , exec_info : Maybe String
+    , lineno : Maybe Int
+    , filename : Maybe String
+    , asctime : Maybe String
+    }
+
+
+type alias LogRecord =
+    { levelname : String
+    , name : String
+    , message : String
+    , exec_info : Maybe String
+    , lineno : Maybe Int
+    , filename : Maybe String
+    , asctime : Maybe String
     }
 
 
 init : ( Model, Cmd Msg )
 init =
-    ( { messages =
-            [ Message "a" "b" False False
-            ]
-      , hilight = Nothing
+    ( { messages = Nothing
+      , filters = Nothing
       }
     , Cmd.none
     )
@@ -34,9 +55,71 @@ init =
 type Msg
     = NoOp
     | WsMessage String
-    | Search
-    | SetSearch String
-    | Clear
+    | SetFilter String
+    | ToggleLevel String
+    | ClearFilter
+
+
+decodeMessage : Result String LogRecord -> Message
+decodeMessage payload =
+    case payload of
+        Err msg ->
+            Message "Error decoding paylod:" "" msg Nothing Nothing Nothing Nothing
+
+        Ok value ->
+            Message value.levelname value.name value.message value.exec_info value.lineno value.filename value.asctime
+
+
+addFilter : Model -> String -> Model
+addFilter model filter =
+    case model.filters of
+        Nothing ->
+            { model | filters = Just (Filters (Just filter) Nothing) }
+
+        Just filters ->
+            let
+                levels =
+                    filters.levels
+            in
+                { model | filters = Just (Filters (Just filter) levels) }
+
+
+toggleFromList : Maybe (List a) -> a -> Maybe (List a)
+toggleFromList list item =
+    -- remove if in there
+    case list of
+        Nothing ->
+            Just [ item ]
+
+        Just list ->
+            if List.member item list then
+                let
+                    filtered =
+                        List.filter (\list_item -> list_item /= item) list
+                in
+                    if ((List.length filtered) > 0) then
+                        Just filtered
+                    else
+                        Nothing
+            else
+                Just (item :: list)
+
+
+toggleLevel : Model -> String -> Model
+toggleLevel model level =
+    case model.filters of
+        Nothing ->
+            { model | filters = Just (Filters Nothing (Just [ level ])) }
+
+        Just filters ->
+            let
+                oldFilter =
+                    filters.filter
+
+                levels =
+                    toggleFromList filters.levels level
+            in
+                { model | filters = Just (Filters oldFilter levels) }
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -48,97 +131,212 @@ update msg model =
         WsMessage msg ->
             let
                 message =
-                    Message "" msg False True
+                    decodeMessage
+                        (Json.Decode.decodeString logDecoder msg)
             in
-                ( { model | messages = message :: model.messages }, Cmd.none )
+                case model.messages of
+                    Nothing ->
+                        ( { model | messages = Just [ message ] }, Cmd.none )
 
-        SetSearch query ->
-            ( { model | hilight = Just query }, Cmd.none )
+                    Just messages ->
+                        ( { model | messages = Just (message :: messages) }, Cmd.none )
 
-        Search ->
-            search model
+        SetFilter filter ->
+            ( (addFilter model filter), Cmd.none )
 
-        Clear ->
-            clear model
+        ToggleLevel level ->
+            ( (toggleLevel model level), Cmd.none )
 
-
-clear : Model -> ( Model, Cmd Msg )
-clear model =
-    let
-        messages =
-            List.map (\message -> { message | hilight = False, show = True }) model.messages
-    in
-        ( { model | messages = messages }, Cmd.none )
-
-
-hilight : Maybe String -> Message -> Message
-hilight query message =
-    case query of
-        Nothing ->
-            message
-
-        Just query ->
-            if String.contains query message.message then
-                { message | hilight = True }
-            else
-                message
-
-
-search : Model -> ( Model, Cmd Msg )
-search model =
-    let
-        messages =
-            List.map (hilight model.hilight) model.messages
-    in
-        ( { model | messages = messages }, Cmd.none )
+        ClearFilter ->
+            ( { model | filters = Nothing }, Cmd.none )
 
 
 view : Model -> Html Msg
 view model =
     div []
-        [ viewHeader
-        , viewMessages model.messages
+        [ viewHeader model
+        , viewMessages model
         ]
 
 
-hilightClass : Bool -> String
-hilightClass b =
-    if b == True then
-        "hilight_line"
-    else
-        "line"
+
+-- create list of Html Msg with the non nohting parts of the message
 
 
-viewMessage : Message -> Html Msg
-viewMessage message =
-    li [ class (hilightClass message.hilight), hidden (not message.show) ]
-        [ div [ class message.level ] [ text message.level ]
-        , div [] [ text message.message ]
-        ]
+viewAsctime : Maybe String -> List (Html Msg) -> List (Html Msg)
+viewAsctime asctime list =
+    case asctime of
+        Nothing ->
+            list
+
+        Just asctime ->
+            List.append list [ span [ class "asctime" ] [ text asctime ] ]
 
 
-viewMessages : List Message -> Html Msg
-viewMessages messages =
-    let
-        listOfMessages =
-            List.map viewMessage messages
-    in
-        div [ class "content" ]
-            [ ul [ class "logs" ] listOfMessages
-            ]
+viewFileName : Maybe String -> List (Html Msg) -> List (Html Msg)
+viewFileName filename list =
+    case filename of
+        Nothing ->
+            list
+
+        Just filename ->
+            List.append list [ span [ class "filename" ] [ text filename ] ]
 
 
-viewHeader : Html Msg
-viewHeader =
+viewExec : Maybe String -> List (Html Msg) -> List (Html Msg)
+viewExec exec list =
+    case exec of
+        Nothing ->
+            list
+
+        Just exec ->
+            List.append list [ span [ class "exec_info" ] [ text exec ] ]
+
+
+viewLineNo : Maybe Int -> List (Html Msg) -> List (Html Msg)
+viewLineNo lineNo list =
+    case lineNo of
+        Nothing ->
+            list
+
+        Just lineNo ->
+            List.append list [ span [ class "lineNo" ] [ text ("line:" ++ (toString lineNo)) ] ]
+
+
+hideMsg : Maybe Filters -> Message -> Bool
+hideMsg filters message =
+    case filters of
+        Nothing ->
+            False
+
+        Just filter ->
+            case filter.filter of
+                Nothing ->
+                    case filter.levels of
+                        Nothing ->
+                            False
+
+                        Just levels ->
+                            if List.member message.levelname levels then
+                                False
+                            else
+                                True
+
+                Just stringFilter ->
+                    if String.contains stringFilter message.message then
+                        case filter.levels of
+                            Nothing ->
+                                False
+
+                            Just levels ->
+                                if List.member message.levelname levels then
+                                    False
+                                else
+                                    True
+                    else
+                        True
+
+
+viewMessage : Maybe Filters -> Message -> Html Msg
+viewMessage filter message =
+    li [ hidden (hideMsg filter message) ]
+        ([ span [ class message.levelname ] [ text message.levelname ]
+         , span [ class "message" ] [ text message.message ]
+         ]
+            |> viewAsctime message.asctime
+            |> viewLineNo message.lineno
+            |> viewExec message.exec_info
+            |> viewFileName message.filename
+        )
+
+
+viewMessages : Model -> Html Msg
+viewMessages model =
+    case model.messages of
+        Nothing ->
+            div [ class "content" ] [ text "waiting for logs" ]
+
+        Just messages ->
+            let
+                listOfMessages =
+                    List.map (viewMessage model.filters) messages
+            in
+                div [ class "content" ]
+                    [ ul [ class "logs" ] listOfMessages
+                    ]
+
+
+isSelected : Model -> String -> Bool
+isSelected model value =
+    case model.filters of
+        Nothing ->
+            False
+
+        Just filters ->
+            case filters.levels of
+                Nothing ->
+                    False
+
+                Just levels ->
+                    if List.member value levels then
+                        True
+                    else
+                        False
+
+
+
+-- TODO this should really be an union type
+-- with the messages
+
+
+viewHeader : Model -> Html Msg
+viewHeader model =
     div [ class "header" ]
-        [ input [ type_ "text", placeholder "Search logs", onInput SetSearch ] []
-        , button [ onClick Search ] [ text "Search" ]
-        , button [ onClick Clear ] [ text "clear" ]
-        , button [ onClick Clear ] [ text "debug" ]
-        , button [ onClick Clear ] [ text "info" ]
-        , button [ onClick Clear ] [ text "warning" ]
-        , button [ onClick Clear ] [ text "error" ]
+        [ input [ type_ "text", placeholder "filter logs", onInput SetFilter ] []
+        , selectedButton model "DEBUG"
+        , selectedButton model "INFO"
+        , selectedButton model "WARNING"
+        , selectedButton model "ERROR"
+        , button [ onClick ClearFilter ] [ text "clear" ]
         ]
+
+
+selectedButton : Model -> String -> Html Msg
+selectedButton model value =
+    button
+        [ onClick (ToggleLevel value)
+        , classList
+            [ ( "btn", True )
+            , ( "btn_selected", (isSelected model value) )
+            ]
+        ]
+        [ text value ]
+
+
+checkbox : String -> Html Msg
+checkbox name =
+    label
+        [ style [ ( "padding", "20px" ) ]
+        ]
+        [ input
+            [ type_ "checkbox"
+            , onClick (ToggleLevel name)
+            ]
+            []
+        , text name
+        ]
+
+
+logDecoder : Decoder LogRecord
+logDecoder =
+    decode LogRecord
+        |> JP.required "levelname" string
+        |> JP.required "name" string
+        |> JP.required "message" string
+        |> JP.optional "exec_info" (maybe string) Nothing
+        |> JP.optional "lineno" (maybe int) Nothing
+        |> JP.optional "filename" (maybe string) Nothing
+        |> JP.optional "asctime" (maybe string) Nothing
 
 
 subscriptions : Model -> Sub Msg

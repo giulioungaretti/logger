@@ -1,18 +1,19 @@
 body {
-  font-family: 'Source Sans Pro', 'Trebuchet MS', 'Lucida Grande', 'Bitstream Vera Sans', 'Helvetica Neue', sans-serif;
-  font-size: 30px;
-  margin: 0;
-  text-align: left;
-  color: #293c4b;
+    font-family: 'Source Sans Pro', 'Trebuchet MS', 'Lucida Grande', 'Bitstream Vera Sans', 'Helvetica Neue', sans-serif;
+    font-size: 30px;
+    margin: 0;
+    text-align: left;
+    color: #293c4b;
 }
 
 img {
-  margin: 20px 0;
-  max-width: 200px;
+    margin: 20px 0;
+    max-width: 200px;
 }
 
 .header{
     text-align: center;
+    magin:0.1em;
 }
 
 .logs{
@@ -27,3 +28,28 @@ img {
 .hilight_line{
     color:red;
 }
+
+li span{
+    margin: .1em;
+}
+
+.btn {
+    background-color: white;
+    color: black;
+    border: 2px solid #e7e7e7;
+}
+
+
+.btn_selected {background-color: #e7e7e7;}
+
+.btn:hover {
+    cursor: pointer;
+    background-color: #e7e7e7;
+}
+
+.btn:active {
+    outline: none;
+    border: none;
+}
+
+.btn:focus {outline:0;}
