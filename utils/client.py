@@ -1,5 +1,5 @@
 """
-Simple client that prints to console
+Simple zmq client that prints to console
 """
 import sys
 import zmq
