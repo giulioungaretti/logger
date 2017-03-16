@@ -10,6 +10,10 @@ import zmq
 import zmq.asyncio
 import websockets
 
+from websockets.exceptions import ConnectionClosed
+
+log = logging.getLogger(__name__)
+
 context = zmq.asyncio.Context()
 loop = zmq.asyncio.ZMQEventLoop()
 asyncio.set_event_loop(loop)
@@ -53,7 +57,7 @@ async def consumer(msg):
 
 
 async def handler(websocket, path):
-    print(path)
+    log.debug("Started client %s")
     while True:
         listener_task = asyncio.ensure_future(websocket.recv())
         producer_task = asyncio.ensure_future(producer(socket))
@@ -61,19 +65,25 @@ async def handler(websocket, path):
             [listener_task, producer_task],
             return_when=asyncio.FIRST_COMPLETED)
 
-        if listener_task in done:
-            message = listener_task.result()
-            await consumer(message)
-        else:
-            listener_task.cancel()
+        try:
+            if listener_task in done:
+                    message = listener_task.result()
+                    await consumer(message)
+            else:
+                listener_task.cancel()
 
-        if producer_task in done:
-            message = producer_task.result()
-            await websocket.send(json.dumps(message))
-        else:
-            producer_task.cancel()
+            if producer_task in done:
+                try:
+                    message = producer_task.result()
+                    await websocket.send(json.dumps(message))
+                except ConnectionClosed:
+                    pass
+            else:
+                producer_task.cancel()
+        except ConnectionClosed:
+            break
+    log.debug("Disconnected client %s")
 
 start_server = websockets.serve(handler, '127.0.0.1', 5678)
 asyncio.get_event_loop().run_until_complete(start_server)
-
 asyncio.get_event_loop().run_forever()
