@@ -1,5 +1,5 @@
 """
-Simple client that prints to console
+Simple client that forwards from zmq to ws
 """
 import asyncio
 import json
