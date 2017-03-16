@@ -9,9 +9,9 @@ This project is bootstrapped with [Create Elm App](https://github.com/halfzebra/
 
 ## TODO
 
-- [] Implement local storage on save
-- [] Pass port as flag ?
-- [] Implement save as csv
+- [ ] Implement local storage on save
+- [ ] Pass port as flag ?
+- [ ] Implement save as csv
 
 ## Installing Elm packages
 
