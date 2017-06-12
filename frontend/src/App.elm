@@ -6,7 +6,6 @@ import Html.Events exposing (onInput, onClick)
 import WebSocket exposing (..)
 import Json.Decode exposing (Decoder, string, int, maybe)
 import Json.Decode.Pipeline as JP exposing (decode, required)
-import Debug exposing (..)
 
 
 type alias Model =
